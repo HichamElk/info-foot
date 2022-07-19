@@ -26,7 +26,7 @@ const FootballClub = (props) => {
       url: 'https://api-football-v1.p.rapidapi.com/v3/teams/statistics',
       params: {
           league: props.league_id,
-          season: 2021,
+          season: 2022,
           team: props.team_id
       },
       headers: {
