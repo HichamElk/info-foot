@@ -54,16 +54,13 @@ const FootballClub = (props) => {
     const goalsAgainst = data['response']['goals'].against.minute
     const goalsFor = data['response']['goals'].for.minute
 
-    console.log("Constants created");
-
     function addGoals(half, data) {
-        const count= 0
-        console.log("init count");
+        let count= 0
+        let time;
         for (time in half) {
-            count= count + data[half[time]].total
+            count += data[half[time]].total
         }
         return count
-        console.log("get data");
     }
 
     let firstHalfAgainst= addGoals(firstHalf, goalsAgainst)
