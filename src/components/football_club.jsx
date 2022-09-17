@@ -48,22 +48,26 @@ const FootballClub = (props) => {
   if(isStatsLoading) {
       return <Center><Spinner size='xl'/></Center>
   }
-  console.log(data);
-  let arr=[];
-          Object.entries(data['response']['goals']['against']['minute']).slice(0,3).map(time => arr.push(Object.entries(time)[1][1]['total']))
-          let firstHalfAgainst=arr.reduce((previousValue, currentValue) => previousValue + currentValue,0);
-          arr=[];
-          Object.entries(data['response']['goals']['against']['minute']).slice(3,6).map(time => arr.push(Object.entries(time)[1][1]['total']))
-          let secondHalfAgainst=arr.reduce((previousValue, currentValue) => previousValue + currentValue,0);
+    const firstHalf = ['0-15', '16-30', '31-45']
+    const secondHalf = ['46-60', '61-75', '76-90']
 
+    const goalsAgainst = data['response']['goals'].against.minute
+    const goalsFor = data['response']['goals'].for.minute
 
-          arr=[];
-          Object.entries(data['response']['goals']['for']['minute']).slice(0,3).map(time => arr.push(Object.entries(time)[1][1]['total']))
-          let firstHalfFor=arr.reduce((previousValue, currentValue) => previousValue + currentValue,0);
-          arr=[];
-          Object.entries(data['response']['goals']['for']['minute']).slice(3,6).map(time => arr.push(Object.entries(time)[1][1]['total']))
-          let secondHalfFor=arr.reduce((previousValue, currentValue) => previousValue + currentValue,0);
-          
+    function addGoals(half, data) {
+        const count= 0
+        for (time in half) {
+            count= count + data[half[time]].total
+        }
+        return count
+    }
+
+    let firstHalfAgainst= addGoals(firstHalf, goalsAgainst)
+    let secondHalfAgainst= addGoals(secondHalf, goalsAgainst)
+
+    let firstHalfFor= addGoals(firstHalf, goalsFor)
+    let secondHalfFor= addGoals(secondHalf, goalsFor)
+
 
   return (
       <Center >

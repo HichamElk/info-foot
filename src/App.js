@@ -102,7 +102,7 @@ function League ({league_id}) {
 
   //Call URL /stadings with Axios
   useEffect(() => {
-    console.log("The League istance is refreshed with ID : ",league_id);
+    console.log("The League instance is refreshed with ID : ",league_id);
     axios.request(optionsLeagueStandings).then((response) => {
       setData(prevState => {
           return {...prevState, standings:response.data}
@@ -129,7 +129,7 @@ function League ({league_id}) {
                               <Th>N</Th>
                               <Th>D</Th>
                               <Th>Fiche Info</Th>
-                              <Th isNumeric>But marqués</Th>
+                              <Th isNumeric>Buts marqués</Th>
                               <Th isNumeric>1ere MT</Th>
                               <Th isNumeric>2eme MT</Th>
                               <Th isNumeric>Buts encaissés</Th>
