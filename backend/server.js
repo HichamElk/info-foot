@@ -50,17 +50,55 @@ app.get('/api/live', async (req, res) => {
   }
 });
 
+// Helper : fixtures par date (cache partage entre /today et /wc)
+async function getFixturesByDate(date) {
+  const today = new Date().toISOString().split('T')[0];
+  const isPast = date < today;
+  const ttl = isPast ? 43200 : 120; // passe: 12h (immuable), aujourd'hui/futur: 2min
+  return cachedRequest(`fixtures_date_${date}`, ttl, async () => {
+    const { data } = await apiClient.get('/fixtures', { params: { date } });
+    return data;
+  });
+}
+
 // Matchs du jour
 app.get('/api/today', async (req, res) => {
   try {
     const today = new Date().toISOString().split('T')[0];
-    const data = await cachedRequest(`today_${today}`, 120, async () => {
-      const { data } = await apiClient.get('/fixtures', { params: { date: today } });
-      return data;
-    });
+    const data = await getFixturesByDate(today);
     res.json(data);
   } catch (err) {
     console.error('GET /api/today', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Matchs Coupe du Monde (fenetre glissante : 7 jours passes + aujourd'hui + 7 jours futurs)
+app.get('/api/wc', async (req, res) => {
+  try {
+    const WC_START = new Date('2026-06-11');
+    const WC_END   = new Date('2026-07-19');
+    const now      = new Date();
+
+    const from = new Date(Math.max(now.getTime() - 7 * 86400000, WC_START.getTime()));
+    const to   = new Date(Math.min(now.getTime() + 7 * 86400000, WC_END.getTime()));
+
+    const dates = [];
+    for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+      dates.push(d.toISOString().split('T')[0]);
+    }
+
+    const fixtures = [];
+    for (const date of dates) {
+      const data = await getFixturesByDate(date);
+      const wc = (data.response || []).filter(f => f.league.id === 1);
+      fixtures.push(...wc);
+    }
+
+    fixtures.sort((a, b) => new Date(a.fixture.date) - new Date(b.fixture.date));
+    res.json({ response: fixtures, results: fixtures.length });
+  } catch (err) {
+    console.error('GET /api/wc', err.message);
     res.status(500).json({ error: err.message });
   }
 });

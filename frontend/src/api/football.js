@@ -19,4 +19,5 @@ export const api = {
   getTeamStats: (teamId, leagueId, season = 2024) =>
     request(`/teams/${teamId}/stats?league=${leagueId}&season=${season}`),
   getMatch: (fixtureId) => request(`/match/${fixtureId}`),
+  getWC: () => request('/wc'),
 };

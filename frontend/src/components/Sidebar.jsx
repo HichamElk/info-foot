@@ -30,7 +30,7 @@ export default function Sidebar() {
       </div>
 
       {/* Navigation principale */}
-      <nav className="p-3 border-b border-zinc-800">
+      <nav className="p-3 border-b border-zinc-800 space-y-0.5">
         <Link
           to="/"
           className={pathname === '/' ? 'sidebar-link-active' : 'sidebar-link-inactive'}
@@ -43,6 +43,19 @@ export default function Sidebar() {
             )}
           </span>
           <span>Live &amp; Aujourd'hui</span>
+        </Link>
+        <Link
+          to="/world-cup"
+          className={pathname === '/world-cup'
+            ? 'sidebar-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm bg-yellow-500/10 text-yellow-400 font-medium'
+            : 'sidebar-link-inactive'
+          }
+        >
+          <span className="flex items-center justify-center w-5 text-base">&#x1F3C6;</span>
+          <span>Coupe du Monde 2026</span>
+          <span className="ml-auto text-xs px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded-full font-semibold">
+            LIVE
+          </span>
         </Link>
       </nav>
 
