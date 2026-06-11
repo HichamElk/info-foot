@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-zinc-950 text-zinc-100 font-sans antialiased;
+    min-height: 100vh;
+  }
+
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-zinc-950;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-zinc-700 rounded-full;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-zinc-900 border border-zinc-800 rounded-xl;
+  }
+
+  .card-hover {
+    @apply card hover:bg-zinc-800/60 transition-colors cursor-pointer;
+  }
+
+  .badge-live {
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 bg-red-500/15 text-red-400 text-xs font-semibold rounded-full;
+  }
+
+  .badge-finished {
+    @apply inline-flex items-center px-2 py-0.5 bg-zinc-800 text-zinc-500 text-xs font-medium rounded-full;
+  }
+
+  .badge-upcoming {
+    @apply inline-flex items-center px-2 py-0.5 bg-blue-500/10 text-blue-400 text-xs font-medium rounded-full;
+  }
+
+  .tab-btn {
+    @apply px-4 py-2 text-sm font-medium rounded-lg transition-colors;
+  }
+
+  .tab-btn-active {
+    @apply tab-btn bg-zinc-800 text-zinc-100;
+  }
+
+  .tab-btn-inactive {
+    @apply tab-btn text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors;
+  }
+
+  .sidebar-link-active {
+    @apply sidebar-link bg-emerald-500/10 text-emerald-400 font-medium;
+  }
+
+  .sidebar-link-inactive {
+    @apply sidebar-link text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/70;
+  }
+}
