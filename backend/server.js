@@ -18,13 +18,7 @@ if (!API_KEY) {
 // Durees de cache : live=30s, standings/fixtures=5min, stats=10min
 const cache = new NodeCache();
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  process.env.FRONTEND_URL,
-].filter(Boolean);
-
-app.use(cors({ origin: allowedOrigins }));
+app.use(cors());
 app.use(express.json());
 
 const apiClient = axios.create({
