@@ -13,11 +13,19 @@ export const LEAGUES = [
   { id: 'BSA', name: 'Brésil Série A', country: 'Brésil',     logo: 'https://crests.football-data.org/bsa.png' },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ open = false, onClose = () => {} }) {
   const { pathname } = useLocation();
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col z-20">
+    <>
+      {/* Overlay sombre (mobile/tablette quand le menu est ouvert) */}
+      {open && <div className="lg:hidden fixed inset-0 bg-black/60 z-30" onClick={onClose} />}
+
+      <aside
+        className={`fixed left-0 top-0 h-screen w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col z-40 transform transition-transform duration-200 lg:translate-x-0 ${
+          open ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
       {/* Logo */}
       <div className="p-5 border-b border-zinc-800">
         <Link to="/" className="flex items-center gap-2.5">
@@ -32,6 +40,7 @@ export default function Sidebar() {
       <nav className="p-3 border-b border-zinc-800 space-y-0.5">
         <Link
           to="/"
+          onClick={onClose}
           className={pathname === '/' ? 'sidebar-link-active' : 'sidebar-link-inactive'}
         >
           <span className="flex items-center justify-center w-5">
@@ -45,6 +54,7 @@ export default function Sidebar() {
         </Link>
         <Link
           to="/world-cup"
+          onClick={onClose}
           className={pathname === '/world-cup'
             ? 'sidebar-link flex items-center gap-3 px-3 py-2 rounded-lg text-sm bg-yellow-500/10 text-yellow-400 font-medium'
             : 'sidebar-link-inactive'
@@ -70,6 +80,7 @@ export default function Sidebar() {
               <Link
                 key={league.id}
                 to={`/league/${league.id}`}
+                onClick={onClose}
                 className={active ? 'sidebar-link-active' : 'sidebar-link-inactive'}
               >
                 <img
@@ -93,6 +104,7 @@ export default function Sidebar() {
           TontonPhil · football-data.org
         </p>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
