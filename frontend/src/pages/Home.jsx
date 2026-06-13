@@ -45,7 +45,7 @@ export default function Home() {
 
       {/* Matchs du jour */}
       <section>
-        <h2 className="font-semibold text-zinc-100 mb-4">Matches du jour</h2>
+        <h2 className="font-semibold text-zinc-100 mb-4">Matchs du jour</h2>
 
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">

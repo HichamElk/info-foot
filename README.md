@@ -11,7 +11,7 @@ Application de suivi football en temps reel : scores live, classements, statisti
 ## Fonctionnalites
 
 - Scores en direct avec auto-refresh toutes les 30 secondes
-- Matches du jour groupes par championnat
+- Matchs du jour groupes par championnat
 - Classements avec zones (UCL, Europa, relegation) et indicateur de forme
 - Modal equipe : bilan, buts par mi-temps, stats avancees
 - Modal match : evenements, statistiques comparatives, compositions
