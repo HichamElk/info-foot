@@ -1,93 +1,141 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api/football';
-import MatchCard from '../components/live/MatchCard';
+import MatchModal from '../components/match/MatchModal';
 
-// Groupes CDM 2026 (connus a l'avance)
-const WC_GROUPS = {
-  'Group A': [2, 6, 95, 21],        // USA, Maroc, Panama, Canada... selon tirage
-  // Les groupes seront deduits automatiquement depuis les donnees API
+// --- Helpers football-data.org ------------------------------------------------
+
+const LIVE_STATUSES = ['IN_PLAY', 'PAUSED'];
+
+const STAGE_LABELS = {
+  GROUP_STAGE: 'Phase de groupes',
+  LAST_16: '8es de finale',
+  QUARTER_FINALS: 'Quarts de finale',
+  SEMI_FINALS: 'Demi-finales',
+  THIRD_PLACE: 'Match pour la 3e place',
+  FINAL: 'Finale',
 };
 
-function computeStandings(fixtures) {
-  const teams = {};
-
-  fixtures.forEach((f) => {
-    if (f.fixture.status.short !== 'FT' && f.fixture.status.short !== 'AET') return;
-    const { home, away } = f.teams;
-    const gh = f.goals.home;
-    const ga = f.goals.away;
-    if (gh === null || ga === null) return;
-
-    [home, away].forEach((t) => {
-      if (!teams[t.id]) {
-        teams[t.id] = {
-          id: t.id, name: t.name, logo: t.logo,
-          played: 0, win: 0, draw: 0, lose: 0,
-          gf: 0, ga: 0, points: 0,
-          group: f.league.round,
-        };
-      }
-    });
-
-    const isHome = (id) => id === home.id;
-    const update = (team, scored, conceded) => {
-      team.played++;
-      team.gf += scored;
-      team.ga += conceded;
-      if (scored > conceded) { team.win++; team.points += 3; }
-      else if (scored === conceded) { team.draw++; team.points += 1; }
-      else { team.lose++; }
-    };
-
-    update(teams[home.id], gh, ga);
-    update(teams[away.id], ga, gh);
-  });
-
-  // Deduire les groupes depuis les matchs (equipes qui ont joue ensemble)
-  const groupMap = {};
-  fixtures.forEach((f) => {
-    const round = f.league.round;
-    if (!round.startsWith('Group Stage')) return;
-    const hId = f.teams.home.id;
-    const aId = f.teams.away.id;
-    if (!groupMap[hId]) groupMap[hId] = new Set();
-    if (!groupMap[aId]) groupMap[aId] = new Set();
-    groupMap[hId].add(aId);
-    groupMap[aId].add(hId);
-  });
-
-  // Union-Find simplifie pour regrouper les equipes connectees
-  const parent = {};
-  const find = (x) => { if (parent[x] === undefined) parent[x] = x; return parent[x] === x ? x : (parent[x] = find(parent[x])); };
-  const union = (x, y) => { parent[find(x)] = find(y); };
-
-  Object.entries(groupMap).forEach(([teamId, opponents]) => {
-    opponents.forEach((opId) => union(parseInt(teamId), opId));
-  });
-
-  // Regrouper
-  const groups = {};
-  Object.values(teams).forEach((team) => {
-    const root = find(team.id);
-    if (!groups[root]) groups[root] = [];
-    groups[root].push(team);
-  });
-
-  return Object.values(groups).map((g) =>
-    g.sort((a, b) => b.points - a.points || (b.gf - b.ga) - (a.gf - a.ga) || b.gf - a.gf)
-  ).sort((a, b) => b.length - a.length);
+// Libelle de phase d'un match : "GROUP_A" -> "Groupe A", sinon nom de la phase finale
+function phaseLabel(match) {
+  if (match.group) {
+    const letter = match.group.replace(/^GROUP[_\s]*/i, '');
+    return `Groupe ${letter}`;
+  }
+  if (match.stage) {
+    return STAGE_LABELS[match.stage] || match.stage.replace(/_/g, ' ');
+  }
+  return 'Match';
 }
 
+function statusLabel(status, utcDate) {
+  switch (status) {
+    case 'IN_PLAY':
+      return 'EN DIRECT';
+    case 'PAUSED':
+      return 'MI-TEMPS';
+    case 'FINISHED':
+      return 'Terminé';
+    case 'POSTPONED':
+      return 'Reporté';
+    case 'SUSPENDED':
+      return 'Suspendu';
+    case 'CANCELLED':
+      return 'Annulé';
+    default:
+      // SCHEDULED / TIMED : heure de coup d'envoi (locale)
+      return new Date(utcDate).toLocaleTimeString('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+  }
+}
+
+function Team({ team, bold }) {
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      {team.crest && (
+        <img src={team.crest} alt={team.name} className="w-5 h-5 object-contain shrink-0" />
+      )}
+      <span className={`truncate ${bold ? 'text-zinc-100 font-semibold' : 'text-zinc-300'}`}>
+        {team.shortName || team.name}
+      </span>
+    </div>
+  );
+}
+
+function WCMatchCard({ match }) {
+  const [showModal, setShowModal] = useState(false);
+  const { homeTeam, awayTeam, score, status, utcDate } = match;
+  const live = LIVE_STATUSES.includes(status);
+  const finished = status === 'FINISHED';
+  const showScore = live || finished;
+  const fh = score?.fullTime?.home;
+  const fa = score?.fullTime?.away;
+  const winner = score?.winner; // HOME_TEAM | AWAY_TEAM | DRAW | null
+
+  return (
+    <>
+      <button onClick={() => setShowModal(true)} className="card-hover w-full p-4 text-left">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs text-zinc-600 truncate">
+          {phaseLabel(match)}
+        </span>
+        <span
+          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+            live
+              ? 'bg-red-500/15 text-red-400'
+              : finished
+              ? 'bg-zinc-800 text-zinc-400'
+              : 'bg-zinc-800 text-zinc-500'
+          }`}
+        >
+          {live && <span className="inline-block w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse mr-1 align-middle" />}
+          {statusLabel(status, utcDate)}
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <Team team={homeTeam} bold={winner === 'HOME_TEAM'} />
+          <span className={`text-sm tabular-nums ${showScore ? 'text-zinc-100 font-bold' : 'text-zinc-600'}`}>
+            {showScore ? (fh ?? 0) : ''}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <Team team={awayTeam} bold={winner === 'AWAY_TEAM'} />
+          <span className={`text-sm tabular-nums ${showScore ? 'text-zinc-100 font-bold' : 'text-zinc-600'}`}>
+            {showScore ? (fa ?? 0) : ''}
+          </span>
+        </div>
+      </div>
+      </button>
+
+      {showModal && (
+        <MatchModal
+          matchId={match.id}
+          fixture={{ teams: { home: homeTeam, away: awayTeam } }}
+          onClose={() => setShowModal(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// --- Page ---------------------------------------------------------------------
+
 export default function WorldCupPage() {
-  const [fixtures, setFixtures] = useState([]);
+  const [standings, setStandings] = useState([]);
+  const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('matches');
   const [error, setError] = useState(null);
 
   const fetchWC = useCallback(async () => {
     try {
-      const data = await api.getWC();
-      setFixtures(data.response || []);
+      const [st, mt] = await Promise.all([api.getWCStandings(), api.getWCMatches()]);
+      setStandings(st.standings || []);
+      setMatches(mt.matches || []);
+      setError(null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -101,22 +149,19 @@ export default function WorldCupPage() {
     return () => clearInterval(interval);
   }, [fetchWC]);
 
-  // Grouper les matchs par date
-  const byDate = fixtures.reduce((acc, f) => {
-    const date = f.fixture.date.split('T')[0];
+  const liveMatches = matches.filter((m) => LIVE_STATUSES.includes(m.status));
+  const completedCount = matches.filter((m) => m.status === 'FINISHED').length;
+
+  // Calendrier : matchs groupes par date locale, tries chronologiquement
+  const sorted = [...matches].sort((a, b) => new Date(a.utcDate) - new Date(b.utcDate));
+  const byDate = sorted.reduce((acc, m) => {
+    const date = new Date(m.utcDate).toLocaleDateString('fr-CA'); // YYYY-MM-DD local
     if (!acc[date]) acc[date] = [];
-    acc[date].push(f);
+    acc[date].push(m);
     return acc;
   }, {});
 
-  const liveMatches = fixtures.filter((f) =>
-    ['1H', '2H', 'HT', 'ET'].includes(f.fixture.status.short)
-  );
-
-  const completedCount = fixtures.filter((f) => f.fixture.status.short === 'FT').length;
-  const standings = computeStandings(fixtures);
-
-  const today = new Date().toISOString().split('T')[0];
+  const today = new Date().toLocaleDateString('fr-CA');
 
   return (
     <div className="space-y-6">
@@ -133,11 +178,11 @@ export default function WorldCupPage() {
             <h1 className="text-2xl font-bold text-zinc-100">Coupe du Monde 2026</h1>
             <p className="text-yellow-400/80 text-sm mt-0.5">USA · Canada · Mexique · 11 juin — 19 juillet</p>
             <div className="flex items-center gap-3 mt-2 text-xs text-zinc-500">
-              <span>{fixtures.length} matchs</span>
+              <span>{matches.length} matchs</span>
               <span>·</span>
               <span>{completedCount} joues</span>
               <span>·</span>
-              <span>{fixtures.length - completedCount} a venir</span>
+              <span>{matches.length - completedCount} a venir</span>
             </div>
           </div>
         </div>
@@ -154,8 +199,8 @@ export default function WorldCupPage() {
             </span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {liveMatches.map((f) => (
-              <MatchCard key={f.fixture.id} fixture={f} />
+            {liveMatches.map((m) => (
+              <WCMatchCard key={m.id} match={m} />
             ))}
           </div>
         </div>
@@ -194,7 +239,7 @@ export default function WorldCupPage() {
       ) : activeTab === 'matches' ? (
         <MatchesTab byDate={byDate} today={today} />
       ) : (
-        <StandingsTab groups={standings} completedCount={completedCount} />
+        <StandingsTab standings={standings} />
       )}
     </div>
   );
@@ -205,7 +250,7 @@ function MatchesTab({ byDate, today }) {
   if (dates.length === 0) {
     return (
       <div className="card p-8 text-center">
-        <p className="text-sm text-zinc-500">Aucun match dans la fenetre de 15 jours.</p>
+        <p className="text-sm text-zinc-500">Aucun match disponible.</p>
       </div>
     );
   }
@@ -216,7 +261,9 @@ function MatchesTab({ byDate, today }) {
         const isToday = date === today;
         const d = new Date(date + 'T12:00:00');
         const label = d.toLocaleDateString('fr-FR', {
-          weekday: 'long', day: 'numeric', month: 'long',
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
         });
 
         return (
@@ -233,8 +280,8 @@ function MatchesTab({ byDate, today }) {
               <span className="text-xs text-zinc-600 ml-auto">{byDate[date].length} match(s)</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              {byDate[date].map((f) => (
-                <MatchCard key={f.fixture.id} fixture={f} />
+              {byDate[date].map((m) => (
+                <WCMatchCard key={m.id} match={m} />
               ))}
             </div>
           </div>
@@ -244,77 +291,88 @@ function MatchesTab({ byDate, today }) {
   );
 }
 
-function StandingsTab({ groups, completedCount }) {
-  if (completedCount === 0) {
-    return (
-      <div className="card p-8 text-center">
-        <p className="text-2xl mb-3">&#x23F3;</p>
-        <p className="text-sm text-zinc-400">Les classements apparaitront apres les premiers matchs.</p>
-      </div>
-    );
-  }
+function StandingsTab({ standings }) {
+  // On ne garde que les poules (groupes), pas les eventuels classements de phase finale
+  const groups = standings.filter((s) => s.group && (s.table || []).length > 0);
 
   if (groups.length === 0) {
     return (
       <div className="card p-8 text-center">
-        <p className="text-sm text-zinc-500">Classements en cours de calcul...</p>
+        <p className="text-sm text-zinc-500">Classements indisponibles.</p>
       </div>
     );
   }
 
-  const letters = 'ABCDEFGHIJKL';
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {groups.map((group, gi) => (
-        <div key={gi} className="card overflow-hidden">
-          <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-800/40 flex items-center gap-2">
-            <div className="w-6 h-6 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded flex items-center justify-center">
-              {letters[gi] || gi + 1}
+      {groups.map((group) => {
+        const letter = group.group.replace(/^Group\s*/i, '');
+        return (
+          <div key={group.group} className="card overflow-hidden">
+            <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-800/40 flex items-center gap-2">
+              <div className="w-6 h-6 bg-yellow-500/20 text-yellow-400 text-xs font-bold rounded flex items-center justify-center">
+                {letter}
+              </div>
+              <span className="text-sm font-semibold text-zinc-200">Groupe {letter}</span>
             </div>
-            <span className="text-sm font-semibold text-zinc-200">Groupe {letters[gi] || gi + 1}</span>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-zinc-800">
-                <th className="text-left text-xs text-zinc-500 font-medium py-2 pl-4 pr-2">Equipe</th>
-                <th className="text-center text-xs text-zinc-500 font-medium py-2 px-2">MJ</th>
-                <th className="text-center text-xs text-zinc-500 font-medium py-2 px-2">V</th>
-                <th className="text-center text-xs text-zinc-500 font-medium py-2 px-2">N</th>
-                <th className="text-center text-xs text-zinc-500 font-medium py-2 px-2">D</th>
-                <th className="text-center text-xs text-zinc-500 font-medium py-2 px-2">DB</th>
-                <th className="text-center text-xs text-zinc-500 font-medium py-2 pl-2 pr-4">Pts</th>
-              </tr>
-            </thead>
-            <tbody>
-              {group.map((team, ti) => (
-                <tr key={team.id} className={`border-b border-zinc-800/40 ${ti < 2 ? 'border-l-2 border-l-yellow-500/60' : ''}`}>
-                  <td className="py-2.5 pl-4 pr-2">
-                    <div className="flex items-center gap-2">
-                      <img src={team.logo} alt={team.name} className="w-5 h-5 object-contain shrink-0" />
-                      <span className="text-zinc-200 font-medium truncate">{team.name}</span>
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-2 text-center text-zinc-400">{team.played}</td>
-                  <td className="py-2.5 px-2 text-center text-zinc-400">{team.win}</td>
-                  <td className="py-2.5 px-2 text-center text-zinc-400">{team.draw}</td>
-                  <td className="py-2.5 px-2 text-center text-zinc-400">{team.lose}</td>
-                  <td className="py-2.5 px-2 text-center">
-                    <span className={(team.gf - team.ga) > 0 ? 'text-emerald-400' : (team.gf - team.ga) < 0 ? 'text-red-400' : 'text-zinc-400'}>
-                      {team.gf - team.ga > 0 ? '+' : ''}{team.gf - team.ga}
-                    </span>
-                  </td>
-                  <td className="py-2.5 pl-2 pr-4 text-center font-bold text-zinc-100">{team.points}</td>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800">
+                  <th className="text-left text-xs text-zinc-500 font-medium py-2 pl-4 pr-2">Equipe</th>
+                  <th className="text-center text-xs text-zinc-500 font-medium py-2 px-2">MJ</th>
+                  <th className="text-center text-xs text-zinc-500 font-medium py-2 px-2">V</th>
+                  <th className="text-center text-xs text-zinc-500 font-medium py-2 px-2">N</th>
+                  <th className="text-center text-xs text-zinc-500 font-medium py-2 px-2">D</th>
+                  <th className="text-center text-xs text-zinc-500 font-medium py-2 px-2">DB</th>
+                  <th className="text-center text-xs text-zinc-500 font-medium py-2 pl-2 pr-4">Pts</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="px-4 py-2 flex items-center gap-1.5 text-xs text-zinc-600">
-            <div className="w-2 h-2 border-l-2 border-l-yellow-500/60 rounded-sm" />
-            <span>Qualifies pour les 1/8</span>
+              </thead>
+              <tbody>
+                {group.table.map((row) => (
+                  <tr
+                    key={row.team.id}
+                    className={`border-b border-zinc-800/40 ${row.position <= 2 ? 'border-l-2 border-l-yellow-500/60' : ''}`}
+                  >
+                    <td className="py-2.5 pl-4 pr-2">
+                      <div className="flex items-center gap-2">
+                        {row.team.crest && (
+                          <img src={row.team.crest} alt={row.team.name} className="w-5 h-5 object-contain shrink-0" />
+                        )}
+                        <span className="text-zinc-200 font-medium truncate">
+                          {row.team.shortName || row.team.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-2.5 px-2 text-center text-zinc-400">{row.playedGames}</td>
+                    <td className="py-2.5 px-2 text-center text-zinc-400">{row.won}</td>
+                    <td className="py-2.5 px-2 text-center text-zinc-400">{row.draw}</td>
+                    <td className="py-2.5 px-2 text-center text-zinc-400">{row.lost}</td>
+                    <td className="py-2.5 px-2 text-center">
+                      <span
+                        className={
+                          row.goalDifference > 0
+                            ? 'text-emerald-400'
+                            : row.goalDifference < 0
+                            ? 'text-red-400'
+                            : 'text-zinc-400'
+                        }
+                      >
+                        {row.goalDifference > 0 ? '+' : ''}
+                        {row.goalDifference}
+                      </span>
+                    </td>
+                    <td className="py-2.5 pl-2 pr-4 text-center font-bold text-zinc-100">{row.points}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="px-4 py-2 flex items-center gap-1.5 text-xs text-zinc-600">
+              <div className="w-2 h-2 border-l-2 border-l-yellow-500/60 rounded-sm" />
+              <span>Qualifies pour les 1/8</span>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

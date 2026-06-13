@@ -3,6 +3,10 @@ import MatchModal from '../match/MatchModal';
 
 function getMatchTime(fixture) {
   const { short, elapsed, extra } = fixture.fixture.status;
+  if (short === 'LIVE') {
+    // football-data ne fournit pas la minute en direct sur le plan gratuit
+    return { label: elapsed ? `${elapsed}'` : 'Live', type: 'live' };
+  }
   if (['1H', '2H', 'ET'].includes(short)) {
     return { label: `${elapsed}${extra ? `+${extra}` : ''}'`, type: 'live' };
   }
@@ -82,7 +86,7 @@ export default function MatchCard({ fixture }) {
 
       {showModal && (
         <MatchModal
-          fixtureId={fixture.fixture.id}
+          matchId={fixture.fixture.id}
           fixture={fixture}
           onClose={() => setShowModal(false)}
         />

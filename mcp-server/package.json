@@ -1,0 +1,17 @@
+{
+  "name": "info-foot-mcp",
+  "version": "1.0.0",
+  "description": "Serveur MCP exposant les donnees foot d'info-foot a Claude",
+  "type": "module",
+  "main": "index.ts",
+  "bin": {
+    "info-foot-mcp": "index.ts"
+  },
+  "scripts": {
+    "start": "node index.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.23.8"
+  }
+}

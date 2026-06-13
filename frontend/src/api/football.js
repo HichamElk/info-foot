@@ -20,4 +20,7 @@ export const api = {
     request(`/teams/${teamId}/stats?league=${leagueId}&season=${season}`),
   getMatch: (fixtureId) => request(`/match/${fixtureId}`),
   getWC: () => request('/wc'),
+  // football-data.org : donnees CDM 2026 completes
+  getWCStandings: () => request('/wc/standings'),
+  getWCMatches: () => request('/wc/matches'),
 };

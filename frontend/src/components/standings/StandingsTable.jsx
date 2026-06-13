@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { api } from '../../api/football';
 
 const FORM_STYLE = {
   W: 'bg-emerald-500 text-white',
@@ -16,7 +15,7 @@ function getZoneBorder(description) {
   return '';
 }
 
-export default function StandingsTable({ standings, leagueId }) {
+export default function StandingsTable({ standings }) {
   const [selectedTeam, setSelectedTeam] = useState(null);
 
   if (!standings || standings.length === 0) return null;
@@ -127,7 +126,6 @@ export default function StandingsTable({ standings, leagueId }) {
       {selectedTeam && (
         <TeamStatsModal
           entry={selectedTeam}
-          leagueId={leagueId}
           onClose={() => setSelectedTeam(null)}
         />
       )}
@@ -137,18 +135,7 @@ export default function StandingsTable({ standings, leagueId }) {
 
 // ---- Modal stats equipe ----
 
-function TeamStatsModal({ entry, leagueId, onClose }) {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api
-      .getTeamStats(entry.team.id, leagueId)
-      .then((data) => setStats(data.response))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [entry.team.id, leagueId]);
-
+function TeamStatsModal({ entry, onClose }) {
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -156,6 +143,8 @@ function TeamStatsModal({ entry, leagueId, onClose }) {
   }, [onClose]);
 
   const form = entry.form ? entry.form.split('') : [];
+  const goalsFor = entry.all?.goals?.for;
+  const goalsAgainst = entry.all?.goals?.against;
 
   return (
     <div
@@ -233,61 +222,14 @@ function TeamStatsModal({ entry, leagueId, onClose }) {
             </div>
           )}
 
-          {/* Stats avancees */}
-          {loading && (
-            <div className="flex items-center justify-center py-4">
-              <div className="w-6 h-6 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+          {/* Buts (donnees du classement football-data) */}
+          <div>
+            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Buts</p>
+            <div className="grid grid-cols-2 gap-2">
+              <StatBox label="Marques" value={goalsFor} />
+              <StatBox label="Encaisses" value={goalsAgainst} />
             </div>
-          )}
-
-          {stats && !loading && (
-            <>
-              <div>
-                <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Buts</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <StatBox label="Marques" value={stats.goals?.for?.total?.total} />
-                  <StatBox label="Encaisses" value={stats.goals?.against?.total?.total} />
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Buts par mi-temps (marques)</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <StatBox
-                    label="1ere mi-temps"
-                    value={calcHalf(['0-15', '16-30', '31-45'], stats.goals?.for?.minute)}
-                  />
-                  <StatBox
-                    label="2eme mi-temps"
-                    value={calcHalf(['46-60', '61-75', '76-90', '91-105'], stats.goals?.for?.minute)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Buts par mi-temps (encaisses)</p>
-                <div className="grid grid-cols-2 gap-2">
-                  <StatBox
-                    label="1ere mi-temps"
-                    value={calcHalf(['0-15', '16-30', '31-45'], stats.goals?.against?.minute)}
-                  />
-                  <StatBox
-                    label="2eme mi-temps"
-                    value={calcHalf(['46-60', '61-75', '76-90', '91-105'], stats.goals?.against?.minute)}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Discipline</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <StatBox label="Clean sheets" value={stats.clean_sheet?.total} />
-                  <StatBox label="Sans marquer" value={stats.failed_to_score?.total} />
-                  <StatBox label="Penaltys" value={stats.penalty?.scored?.total ?? '-'} />
-                </div>
-              </div>
-            </>
-          )}
+          </div>
         </div>
       </div>
     </div>
@@ -303,9 +245,4 @@ function StatBox({ label, value, accent, color }) {
       <p className="text-xs text-zinc-500 mt-0.5">{label}</p>
     </div>
   );
-}
-
-function calcHalf(periods, data) {
-  if (!data) return 0;
-  return periods.reduce((sum, p) => sum + (data[p]?.total || 0), 0);
 }

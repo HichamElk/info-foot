@@ -4,23 +4,21 @@ import { api } from '../api/football';
 import StandingsTable from '../components/standings/StandingsTable';
 import MatchCard from '../components/live/MatchCard';
 
+// Codes football-data.org (plan gratuit)
 const LEAGUE_INFO = {
-  39:  { name: 'Premier League',    country: 'Angleterre' },
-  40:  { name: 'Championship',      country: 'Angleterre' },
-  61:  { name: 'Ligue 1',           country: 'France' },
-  62:  { name: 'Ligue 2',           country: 'France' },
-  140: { name: 'La Liga',           country: 'Espagne' },
-  135: { name: 'Serie A',           country: 'Italie' },
-  78:  { name: 'Bundesliga',        country: 'Allemagne' },
-  79:  { name: 'Bundesliga 2',      country: 'Allemagne' },
-  144: { name: 'Jupiler Pro League',country: 'Belgique' },
-  203: { name: 'Super Lig',         country: 'Turquie' },
-  88:  { name: 'Eredivisie',        country: 'Pays-Bas' },
+  PL:  { name: 'Premier League', country: 'Angleterre' },
+  PD:  { name: 'La Liga',        country: 'Espagne' },
+  SA:  { name: 'Serie A',        country: 'Italie' },
+  BL1: { name: 'Bundesliga',     country: 'Allemagne' },
+  FL1: { name: 'Ligue 1',        country: 'France' },
+  DED: { name: 'Eredivisie',     country: 'Pays-Bas' },
+  PPL: { name: 'Primeira Liga',  country: 'Portugal' },
+  ELC: { name: 'Championship',   country: 'Angleterre' },
+  BSA: { name: 'Brésil Série A', country: 'Brésil' },
 };
 
 export default function LeaguePage() {
-  const { id } = useParams();
-  const leagueId = parseInt(id);
+  const { id: leagueCode } = useParams();
 
   const [standings, setStandings] = useState(null);
   const [fixtures, setFixtures] = useState([]);
@@ -30,7 +28,7 @@ export default function LeaguePage() {
   const [errorStandings, setErrorStandings] = useState(null);
   const [activeTab, setActiveTab] = useState('standings');
 
-  const info = LEAGUE_INFO[leagueId] || { name: `Ligue ${leagueId}`, country: '' };
+  const info = LEAGUE_INFO[leagueCode] || { name: leagueCode, country: '' };
 
   useEffect(() => {
     // Reset state on league change
@@ -41,7 +39,7 @@ export default function LeaguePage() {
     setLoadingFixtures(true);
     setErrorStandings(null);
 
-    api.getStandings(leagueId)
+    api.getStandings(leagueCode)
       .then((data) => {
         const response = data.response?.[0];
         if (response) {
@@ -54,11 +52,11 @@ export default function LeaguePage() {
       .catch((err) => setErrorStandings(err.message))
       .finally(() => setLoadingStandings(false));
 
-    api.getFixtures(leagueId)
+    api.getFixtures(leagueCode)
       .then((data) => setFixtures(data.response || []))
       .catch(console.error)
       .finally(() => setLoadingFixtures(false));
-  }, [leagueId]);
+  }, [leagueCode]);
 
   return (
     <div className="space-y-6">
@@ -124,7 +122,7 @@ export default function LeaguePage() {
               <p className="text-sm text-red-400">{errorStandings}</p>
             </div>
           ) : (
-            <StandingsTable standings={standings} leagueId={leagueId} />
+            <StandingsTable standings={standings} leagueId={leagueCode} />
           )}
         </>
       )}

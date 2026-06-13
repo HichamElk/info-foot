@@ -1,17 +1,16 @@
 import { Link, useLocation } from 'react-router-dom';
 
+// Codes football-data.org (plan gratuit). id = code utilise dans les routes /league/:id
 export const LEAGUES = [
-  { id: 39,  name: 'Premier League',    country: 'Angleterre' },
-  { id: 40,  name: 'Championship',      country: 'Angleterre' },
-  { id: 61,  name: 'Ligue 1',           country: 'France' },
-  { id: 62,  name: 'Ligue 2',           country: 'France' },
-  { id: 140, name: 'La Liga',           country: 'Espagne' },
-  { id: 135, name: 'Serie A',           country: 'Italie' },
-  { id: 78,  name: 'Bundesliga',        country: 'Allemagne' },
-  { id: 79,  name: 'Bundesliga 2',      country: 'Allemagne' },
-  { id: 144, name: 'Jupiler Pro',       country: 'Belgique' },
-  { id: 203, name: 'Super Lig',         country: 'Turquie' },
-  { id: 88,  name: 'Eredivisie',        country: 'Pays-Bas' },
+  { id: 'PL',  name: 'Premier League', country: 'Angleterre', logo: 'https://crests.football-data.org/PL.png' },
+  { id: 'PD',  name: 'La Liga',        country: 'Espagne',    logo: 'https://crests.football-data.org/laliga.png' },
+  { id: 'SA',  name: 'Serie A',        country: 'Italie',     logo: 'https://crests.football-data.org/c111.png' },
+  { id: 'BL1', name: 'Bundesliga',     country: 'Allemagne',  logo: 'https://crests.football-data.org/BL1.png' },
+  { id: 'FL1', name: 'Ligue 1',        country: 'France',     logo: 'https://crests.football-data.org/FL1.png' },
+  { id: 'DED', name: 'Eredivisie',     country: 'Pays-Bas',   logo: 'https://crests.football-data.org/ED.png' },
+  { id: 'PPL', name: 'Primeira Liga',  country: 'Portugal',   logo: 'https://crests.football-data.org/PPL.png' },
+  { id: 'ELC', name: 'Championship',   country: 'Angleterre', logo: 'https://crests.football-data.org/ELC.png' },
+  { id: 'BSA', name: 'Brésil Série A', country: 'Brésil',     logo: 'https://crests.football-data.org/bsa.png' },
 ];
 
 export default function Sidebar() {
@@ -74,7 +73,7 @@ export default function Sidebar() {
                 className={active ? 'sidebar-link-active' : 'sidebar-link-inactive'}
               >
                 <img
-                  src={`https://media.api-sports.io/football/leagues/${league.id}.png`}
+                  src={league.logo}
                   alt={league.name}
                   className="w-5 h-5 object-contain shrink-0"
                 />
@@ -91,7 +90,7 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="p-4 border-t border-zinc-800">
         <p className="text-xs text-zinc-600 text-center">
-          TontonPhil · API-Football
+          TontonPhil · football-data.org
         </p>
       </div>
     </aside>

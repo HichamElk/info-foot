@@ -1,157 +1,180 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/football';
 
-const STAT_LABELS = {
-  'Shots on Goal':    'Tirs cadres',
-  'Shots off Goal':   'Tirs non cadres',
-  'Total Shots':      'Total tirs',
-  'Blocked Shots':    'Tirs bloques',
-  'Shots insidebox':  'Tirs dans la surface',
-  'Shots outsidebox': 'Tirs hors surface',
-  'Fouls':            'Fautes',
-  'Corner Kicks':     'Corners',
-  'Offsides':         'Hors-jeux',
-  'Ball Possession':  'Possession',
-  'Yellow Cards':     'Cartons jaunes',
-  'Red Cards':        'Cartons rouges',
-  'Goalkeeper Saves': 'Arrets du gardien',
-  'Total passes':     'Passes totales',
-  'Passes accurate':  'Passes precises',
-  'Passes %':         'Precision passes',
-  'expected_goals':   'xG',
+// Detail d'un match :
+// - infos + score : football-data
+// - stats / compositions / evenements : soccer-football-info (champ `sfi`, best effort)
+// - effectifs (fallback si pas de compo SFI) : football-data /teams/{id}
+
+const STATUS_LABELS = {
+  FINISHED: 'Terminé',
+  IN_PLAY: 'En direct',
+  PAUSED: 'Mi-temps',
+  POSTPONED: 'Reporté',
+  SUSPENDED: 'Suspendu',
+  CANCELLED: 'Annulé',
 };
 
-function getStatusDisplay(fixture) {
-  const s = fixture.fixture.status.short;
-  const elapsed = fixture.fixture.status.elapsed;
-  if (['1H', '2H', 'ET'].includes(s)) return { text: `${elapsed}'`, live: true };
-  if (s === 'HT') return { text: 'Mi-temps', live: true };
-  if (s === 'FT') return { text: 'Termine', live: false };
-  if (s === 'NS') {
-    const d = new Date(fixture.fixture.date);
-    return { text: d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }), live: false };
+const EVENT_META = {
+  goal: { icon: '⚽', label: 'But' },
+  own_goal: { icon: '⚽', label: 'CSC' },
+  penalty: { icon: '⚽', label: 'Penalty' },
+  penalty_goal: { icon: '⚽', label: 'Penalty' },
+  missed_penalty: { icon: '❌', label: 'Penalty manqué' },
+  yellow_card: { icon: '🟨', label: 'Carton jaune' },
+  red_card: { icon: '🟥', label: 'Carton rouge' },
+  yellow_red_card: { icon: '🟥', label: 'Deux jaunes' },
+  substitution: { icon: '🔄', label: 'Remplacement' },
+};
+
+const num = (v) => (v === null || v === undefined || v === '' ? null : Number(v));
+
+// --- Position groups (effectif football-data, fallback) ---
+const POS_ORDER = ['Gardiens', 'Défenseurs', 'Milieux', 'Attaquants', 'Autres'];
+function bucket(position) {
+  const p = (position || '').toLowerCase();
+  if (p.includes('keeper')) return 'Gardiens';
+  if (p.includes('back') || p.includes('defence') || p.includes('defender')) return 'Défenseurs';
+  if (p.includes('midfield')) return 'Milieux';
+  if (p.includes('forward') || p.includes('offence') || p.includes('winger') || p.includes('striker') || p.includes('attack'))
+    return 'Attaquants';
+  return 'Autres';
+}
+function groupSquad(squad) {
+  const groups = {};
+  for (const player of squad || []) {
+    const key = bucket(player.position);
+    (groups[key] = groups[key] || []).push(player);
   }
-  return { text: fixture.fixture.status.long, live: false };
+  return POS_ORDER.filter((k) => groups[k]?.length).map((k) => ({ label: k, players: groups[k] }));
 }
 
-export default function MatchModal({ fixtureId, fixture, onClose }) {
-  const [details, setDetails] = useState(null);
+export default function MatchModal({ matchId, fixture, onClose }) {
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('events');
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    api.getMatch(fixtureId)
-      .then(setDetails)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [fixtureId]);
+    let alive = true;
+    api
+      .getMatch(matchId)
+      .then((d) => alive && setData(d))
+      .catch((e) => alive && setError(e.message))
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [matchId]);
 
-  // Close on Escape
   useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    const handler = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  const { home, away } = fixture.teams;
-  const goals = fixture.goals;
-  const status = getStatusDisplay(fixture);
+  const match = data?.match;
+  const status = match?.status;
+  const played = status === 'FINISHED';
+  const live = status === 'IN_PLAY' || status === 'PAUSED';
+  const ft = match?.score?.fullTime;
+  const htScore = match?.score?.halfTime;
 
-  const tabs = [
-    { key: 'events',     label: 'Evenements' },
-    { key: 'statistics', label: 'Statistiques' },
-    { key: 'lineups',    label: 'Compositions' },
-  ];
+  const home = match?.homeTeam || fixture?.teams?.home;
+  const away = match?.awayTeam || fixture?.teams?.away;
+
+  const sfi = data?.sfi;
+  const homeS = sfi ? (sfi.homeIsA ? sfi.teamA : sfi.teamB) : null;
+  const awayS = sfi ? (sfi.homeIsA ? sfi.teamB : sfi.teamA) : null;
+  const venue = sfi?.stadium || match?.venue;
+  const referee = sfi?.referee || match?.referees?.[0]?.name;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <div
-        className="card max-w-2xl w-full max-h-[88vh] flex flex-col overflow-hidden shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* En-tete score */}
-        <div className="relative p-6 bg-gradient-to-b from-zinc-800 to-zinc-900 border-b border-zinc-800">
-          <button
-            onClick={onClose}
-            className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 rounded-lg transition-colors"
-          >
-            x
-          </button>
-
-          {/* Ligue */}
-          <div className="flex items-center justify-center gap-2 mb-5">
-            <img src={fixture.league.logo} alt="" className="w-4 h-4 object-contain" />
-            <span className="text-xs text-zinc-400">{fixture.league.name}</span>
-            <span className="text-zinc-600">·</span>
-            <span className="text-xs text-zinc-500">{fixture.league.round}</span>
-          </div>
-
-          {/* Score */}
-          <div className="flex items-center justify-between gap-4">
-            <TeamHeader team={home} align="left" />
-            <div className="text-center shrink-0 px-4">
-              {goals.home !== null ? (
-                <div className="text-5xl font-bold text-zinc-100 tabular-nums tracking-tight">
-                  {goals.home} - {goals.away}
-                </div>
-              ) : (
-                <div className="text-2xl font-medium text-zinc-400">vs</div>
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="card max-w-2xl w-full max-h-[88vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="p-5 border-b border-zinc-800 sticky top-0 bg-zinc-900/95 backdrop-blur z-10">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              {match?.competition?.name && (
+                <p className="text-xs text-zinc-500 mb-2">
+                  {match.competition.name}
+                  {match.group ? ` · ${match.group.replace(/_/g, ' ')}` : match.stage ? ` · ${match.stage.replace(/_/g, ' ')}` : ''}
+                </p>
               )}
-              <div className="mt-2">
-                {status.live ? (
-                  <span className="badge-live">
-                    <span className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
-                    {status.text}
+              <div className="flex items-center justify-center gap-4">
+                <TeamHead team={home} />
+                <div className="text-center shrink-0">
+                  {played || live ? (
+                    <>
+                      <div className="text-2xl font-bold text-zinc-100 tabular-nums">
+                        {ft?.home ?? 0} - {ft?.away ?? 0}
+                      </div>
+                      {htScore && htScore.home != null && (
+                        <div className="text-xs text-zinc-500 mt-0.5">MT {htScore.home}-{htScore.away}</div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-sm text-zinc-400">
+                      {match?.utcDate
+                        ? new Date(match.utcDate).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+                        : '—'}
+                    </div>
+                  )}
+                  <span className={`inline-block mt-1.5 text-xs font-semibold px-2 py-0.5 rounded-full ${live ? 'bg-red-500/15 text-red-400' : 'bg-zinc-800 text-zinc-400'}`}>
+                    {STATUS_LABELS[status] || 'À venir'}
                   </span>
-                ) : (
-                  <span className="badge-finished">{status.text}</span>
-                )}
+                </div>
+                <TeamHead team={away} align="right" />
               </div>
             </div>
-            <TeamHeader team={away} align="right" />
-          </div>
-        </div>
-
-        {/* Onglets */}
-        <div className="flex border-b border-zinc-800 bg-zinc-900">
-          {tabs.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`flex-1 py-3 text-sm font-medium transition-colors border-b-2 ${
-                activeTab === key
-                  ? 'text-emerald-400 border-emerald-400'
-                  : 'text-zinc-400 border-transparent hover:text-zinc-200'
-              }`}
-            >
-              {label}
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700 rounded-lg transition-colors ml-3 shrink-0">
+              x
             </button>
-          ))}
+          </div>
+
+          {(venue || referee) && (
+            <div className="flex items-center justify-center gap-4 mt-3 text-xs text-zinc-500">
+              {venue && <span>🏟 {venue}</span>}
+              {referee && <span>👤 {referee}</span>}
+            </div>
+          )}
         </div>
 
         {/* Contenu */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="p-5 space-y-7">
           {loading ? (
-            <div className="flex items-center justify-center h-40">
-              <div className="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+            <div className="flex items-center justify-center py-10">
+              <div className="w-7 h-7 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : !details ? (
-            <p className="text-center text-zinc-500 py-12">Donnees non disponibles.</p>
+          ) : error ? (
+            <p className="text-sm text-red-400 text-center py-6">{error}</p>
           ) : (
-            <div className="p-4">
-              {activeTab === 'events' && (
-                <EventsTab events={details.events} homeId={home.id} />
+            <>
+              {sfi && <StatsSection home={homeS} away={awayS} />}
+              {sfi?.events?.length > 0 && <EventsSection events={sfi.events} homeIsA={sfi.homeIsA} homeName={home?.shortName || home?.name} awayName={away?.shortName || away?.name} />}
+
+              {homeS?.lineup?.start?.length || awayS?.lineup?.start?.length ? (
+                <Section title="Compositions">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <LineupColumn name={home?.shortName || home?.name} crest={home?.crest} lineup={homeS?.lineup} manager={homeS?.manager} />
+                    <LineupColumn name={away?.shortName || away?.name} crest={away?.crest} lineup={awayS?.lineup} manager={awayS?.manager} />
+                  </div>
+                </Section>
+              ) : (
+                <Section title="Effectifs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <SquadColumn team={data?.homeTeam} />
+                    <SquadColumn team={data?.awayTeam} />
+                  </div>
+                </Section>
               )}
-              {activeTab === 'statistics' && (
-                <StatisticsTab statistics={details.statistics} teams={{ home, away }} />
+
+              {!sfi && (
+                <p className="text-xs text-zinc-600 text-center">
+                  Statistiques et compositions de match indisponibles pour ce match.
+                </p>
               )}
-              {activeTab === 'lineups' && (
-                <LineupsTab lineups={details.lineups} />
-              )}
-            </div>
+            </>
           )}
         </div>
       </div>
@@ -159,209 +182,178 @@ export default function MatchModal({ fixtureId, fixture, onClose }) {
   );
 }
 
-function TeamHeader({ team, align }) {
+// --- Statistiques ---
+function StatsSection({ home, away }) {
+  const hs = home?.stats;
+  const as = away?.stats;
+  if (!hs && !as) return null;
+  const rows = [
+    { label: 'Possession (%)', h: num(hs?.possession), a: num(as?.possession), bar: true },
+    { label: 'Tirs', h: num(hs?.shoots?.t), a: num(as?.shoots?.t) },
+    { label: 'Tirs cadrés', h: num(hs?.shoots?.on), a: num(as?.shoots?.on) },
+    { label: 'Corners', h: num(hs?.corners?.t), a: num(as?.corners?.t) },
+    { label: 'Fautes', h: num(hs?.fouls?.t), a: num(as?.fouls?.t) },
+    { label: 'Cartons jaunes', h: num(hs?.fouls?.y_c), a: num(as?.fouls?.y_c) },
+    { label: 'Cartons rouges', h: num(hs?.fouls?.r_c), a: num(as?.fouls?.r_c) },
+    { label: 'xG', h: num(hs?.xG?.live), a: num(as?.xG?.live) },
+  ].filter((r) => r.h !== null || r.a !== null);
+  if (!rows.length) return null;
+
   return (
-    <div className={`flex flex-col items-center gap-2 flex-1 ${align === 'right' ? 'items-end' : 'items-start'}`}>
-      <img src={team.logo} alt={team.name} className="w-14 h-14 object-contain" />
-      <span className="text-sm font-semibold text-zinc-100 text-center">{team.name}</span>
-    </div>
+    <Section title="Statistiques">
+      <div className="space-y-2.5">
+        {rows.map((r) => (
+          <StatRow key={r.label} {...r} />
+        ))}
+      </div>
+    </Section>
   );
 }
 
-// --- Onglet evenements ---
-
-const EVENT_ICON = {
-  'Normal Goal': '⚽',
-  'Own Goal':    '⚽',
-  'Penalty':     '⚽',
-  'Missed Penalty': '❌',
-  'Yellow Card': '🟨',
-  'Red Card':    '🟥',
-  'Yellow Red Card': '🟥',
-};
-
-function EventsTab({ events, homeId }) {
-  if (!events || events.length === 0) {
-    return (
-      <p className="text-center text-zinc-500 py-10">
-        Aucun evenement disponible.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-1">
-      {events.map((ev, i) => {
-        const isHome = ev.team.id === homeId;
-        const icon = EVENT_ICON[ev.detail] || (ev.type === 'subst' ? '🔄' : '📋');
-        const isGoal = ev.type === 'Goal';
-        const minute = `${ev.time.elapsed}${ev.time.extra ? `+${ev.time.extra}` : ''}'`;
-
-        return (
-          <div
-            key={i}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-zinc-800/50 ${
-              isHome ? '' : 'flex-row-reverse'
-            }`}
-          >
-            {/* Minute */}
-            <span className="text-xs text-zinc-500 w-10 tabular-nums text-center shrink-0">
-              {minute}
-            </span>
-
-            {/* Icone */}
-            <span className="text-base shrink-0">{icon}</span>
-
-            {/* Info */}
-            <div className={`flex-1 ${isHome ? 'text-left' : 'text-right'}`}>
-              <span className={`text-sm ${isGoal ? 'font-semibold text-zinc-100' : 'text-zinc-300'}`}>
-                {ev.player.name}
-              </span>
-              {ev.type === 'subst' && ev.assist?.name && (
-                <span className="text-xs text-zinc-500 block">
-                  {isHome ? '▲' : '▼'} {ev.assist.name}
-                </span>
-              )}
-              {ev.type === 'Goal' && ev.assist?.name && (
-                <span className="text-xs text-zinc-500 block">
-                  Passe : {ev.assist.name}
-                </span>
-              )}
-              {ev.detail === 'Own Goal' && (
-                <span className="text-xs text-red-400 block">But contre son camp</span>
-              )}
-              {ev.detail === 'Penalty' && (
-                <span className="text-xs text-yellow-400 block">Penalty</span>
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// --- Onglet statistiques ---
-
-function StatisticsTab({ statistics, teams }) {
-  if (!statistics || statistics.length < 2) {
-    return (
-      <p className="text-center text-zinc-500 py-10">
-        Statistiques non disponibles.
-      </p>
-    );
-  }
-
-  const [homeStats, awayStats] = statistics;
-
+function StatRow({ label, h, a, bar }) {
+  const hv = h ?? 0;
+  const av = a ?? 0;
+  const total = hv + av;
+  const hPct = bar ? (h ?? 0) : total > 0 ? (hv / total) * 100 : 50;
   return (
     <div>
-      {/* En-tetes equipes */}
-      <div className="flex justify-between items-center mb-6 px-2">
-        <div className="flex items-center gap-2">
-          <img src={teams.home.logo} alt="" className="w-6 h-6 object-contain" />
-          <span className="text-sm font-medium text-zinc-200">{teams.home.name}</span>
+      <div className="flex items-center justify-between text-sm mb-1">
+        <span className="font-semibold text-zinc-200 tabular-nums w-10">{h ?? '-'}</span>
+        <span className="text-xs text-zinc-500">{label}</span>
+        <span className="font-semibold text-zinc-200 tabular-nums w-10 text-right">{a ?? '-'}</span>
+      </div>
+      <div className="flex gap-1 h-1.5">
+        <div className="flex-1 bg-zinc-800 rounded-l overflow-hidden flex justify-end">
+          <div className="bg-emerald-500/70 h-full" style={{ width: `${bar ? hPct : hPct}%` }} />
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium text-zinc-200">{teams.away.name}</span>
-          <img src={teams.away.logo} alt="" className="w-6 h-6 object-contain" />
+        <div className="flex-1 bg-zinc-800 rounded-r overflow-hidden">
+          <div className="bg-sky-500/70 h-full" style={{ width: `${bar ? (a ?? 0) : 100 - hPct}%` }} />
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="space-y-4">
-        {homeStats.statistics.map((s, i) => {
-          const label = STAT_LABELS[s.type] || s.type;
-          const away = awayStats.statistics[i]?.value;
-          return <StatBar key={i} label={label} home={s.value} away={away} />;
+// --- Evenements ---
+function EventsSection({ events, homeIsA, homeName, awayName }) {
+  const ordered = [...events].sort((x, y) => parseInt(x.timer) - parseInt(y.timer));
+  return (
+    <Section title="Événements">
+      <div className="space-y-1.5">
+        {ordered.map((e, i) => {
+          const meta = EVENT_META[e.type] || { icon: '•', label: e.type };
+          const isHome = (e.team === 'A') === !!homeIsA;
+          return (
+            <div key={i} className={`flex items-center gap-2 text-sm ${isHome ? '' : 'flex-row-reverse text-right'}`}>
+              <span className="text-xs text-zinc-500 tabular-nums w-10 shrink-0">{e.timer}'</span>
+              <span className="shrink-0">{meta.icon}</span>
+              <span className="text-zinc-400 text-xs">{meta.label}</span>
+              <span className="text-zinc-600 text-xs truncate">· {isHome ? homeName : awayName}</span>
+            </div>
+          );
         })}
       </div>
-    </div>
+    </Section>
   );
 }
 
-function StatBar({ label, home, away }) {
-  const parseVal = (v) => {
-    if (v === null || v === undefined) return 0;
-    if (typeof v === 'string' && v.endsWith('%')) return parseFloat(v);
-    return Number(v) || 0;
-  };
-
-  const h = parseVal(home);
-  const a = parseVal(away);
-  const total = h + a;
-  const hPct = total === 0 ? 50 : Math.round((h / total) * 100);
-
+// --- Compositions (SFI) ---
+function LineupColumn({ name, crest, lineup, manager }) {
   return (
-    <div className="px-2">
-      <div className="flex justify-between text-sm mb-1.5">
-        <span className="font-semibold text-zinc-100 tabular-nums">{home ?? 0}</span>
-        <span className="text-xs text-zinc-500">{label}</span>
-        <span className="font-semibold text-zinc-100 tabular-nums">{away ?? 0}</span>
+    <div>
+      <div className="flex items-center gap-2 pb-2 border-b border-zinc-800">
+        {crest && <img src={crest} alt={name} className="w-5 h-5 object-contain" />}
+        <span className="font-semibold text-zinc-200 text-sm truncate">{name}</span>
+        {manager?.name && <span className="text-xs text-zinc-500 ml-auto truncate">🎯 {manager.name}</span>}
       </div>
-      <div className="flex h-1.5 rounded-full overflow-hidden bg-zinc-800">
-        <div
-          className="bg-blue-400 transition-all duration-500"
-          style={{ width: `${hPct}%` }}
-        />
-        <div
-          className="bg-orange-400 transition-all duration-500"
-          style={{ width: `${100 - hPct}%` }}
-        />
+      <div className="mt-3">
+        <p className="text-xs font-semibold text-zinc-500 mb-1">Titulaires</p>
+        <PlayerList players={lineup?.start} />
+        {lineup?.substitutions?.length > 0 && (
+          <>
+            <p className="text-xs font-semibold text-zinc-500 mt-3 mb-1">Remplaçants</p>
+            <PlayerList players={lineup.substitutions} dim />
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-// --- Onglet compositions ---
+function PlayerList({ players, dim }) {
+  if (!players?.length) return <p className="text-sm text-zinc-600">Indisponible.</p>;
+  return (
+    <ul className="space-y-0.5">
+      {players.map((p) => (
+        <li key={p.id} className={`text-sm flex items-center gap-2 ${dim ? 'text-zinc-500' : 'text-zinc-300'}`}>
+          <span className="text-xs text-zinc-600 tabular-nums w-5 shrink-0">{p.s_n ?? ''}</span>
+          <span className="truncate">{p.name}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
-function LineupsTab({ lineups }) {
-  if (!lineups || lineups.length === 0) {
+// --- Effectif football-data (fallback) ---
+function SquadColumn({ team }) {
+  if (!team?.squad?.length) {
     return (
-      <p className="text-center text-zinc-500 py-10">
-        Compositions non disponibles.
-      </p>
+      <div>
+        <SquadHeader team={team} />
+        <p className="text-sm text-zinc-600 mt-2">Effectif indisponible.</p>
+      </div>
     );
   }
-
+  const groups = groupSquad(team.squad);
   return (
-    <div className="grid grid-cols-2 gap-4">
-      {lineups.map((lineup, i) => (
-        <div key={i} className="min-w-0">
-          <div className="flex items-center gap-2 mb-3 pb-3 border-b border-zinc-800">
-            <img src={lineup.team.logo} alt="" className="w-7 h-7 object-contain shrink-0" />
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-zinc-100 truncate">{lineup.team.name}</p>
-              <p className="text-xs text-zinc-500">{lineup.formation}</p>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            {lineup.startXI?.map((p, j) => (
-              <div key={j} className="flex items-center gap-2 text-sm py-0.5">
-                <span className="text-xs text-zinc-600 w-4 text-right tabular-nums shrink-0">
-                  {p.player.number}
-                </span>
-                <span className="text-zinc-200 truncate flex-1">{p.player.name}</span>
-                <span className="text-xs text-zinc-600 shrink-0">{p.player.pos}</span>
-              </div>
-            ))}
-          </div>
-
-          {lineup.substitutes?.length > 0 && (
-            <div className="mt-3 pt-3 border-t border-zinc-800/60">
-              <p className="text-xs text-zinc-600 mb-2 uppercase tracking-wider">Remplacants</p>
-              {lineup.substitutes.map((p, j) => (
-                <div key={j} className="flex items-center gap-2 text-sm py-0.5">
-                  <span className="text-xs text-zinc-700 w-4 text-right tabular-nums shrink-0">
-                    {p.player.number}
-                  </span>
-                  <span className="text-zinc-500 truncate">{p.player.name}</span>
-                </div>
+    <div>
+      <SquadHeader team={team} />
+      <div className="space-y-3 mt-3">
+        {groups.map((g) => (
+          <div key={g.label}>
+            <p className="text-xs font-semibold text-zinc-500 mb-1">{g.label}</p>
+            <ul className="space-y-0.5">
+              {g.players.map((p) => (
+                <li key={p.id} className="text-sm text-zinc-300 flex items-center justify-between gap-2">
+                  <span className="truncate">{p.name}</span>
+                  {p.nationality && <span className="text-xs text-zinc-600 shrink-0">{p.nationality}</span>}
+                </li>
               ))}
-            </div>
-          )}
-        </div>
-      ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SquadHeader({ team }) {
+  if (!team) return null;
+  return (
+    <div className="flex items-center gap-2 pb-2 border-b border-zinc-800">
+      {team.crest && <img src={team.crest} alt={team.name} className="w-5 h-5 object-contain" />}
+      <span className="font-semibold text-zinc-200 text-sm truncate">{team.shortName || team.name}</span>
+      {team.coach?.name && <span className="text-xs text-zinc-500 ml-auto truncate">🎯 {team.coach.name}</span>}
+    </div>
+  );
+}
+
+// --- Helpers ---
+function Section({ title, children }) {
+  return (
+    <div>
+      <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3 text-center">{title}</p>
+      {children}
+    </div>
+  );
+}
+
+function TeamHead({ team, align }) {
+  if (!team) return <div className="flex-1" />;
+  return (
+    <div className={`flex-1 flex items-center gap-2 min-w-0 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
+      {team.crest && <img src={team.crest} alt={team.name} className="w-8 h-8 object-contain shrink-0" />}
+      <span className="font-semibold text-zinc-100 truncate">{team.shortName || team.name}</span>
     </div>
   );
 }
